@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
+extern crate serde;
+extern crate serde_json;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
@@ -27,4 +29,5 @@ fn main() {
     let connection = establish_connection();
     let last = events.order(when.desc()).first::<Event>(&connection).expect("Error loading event");
     println!("{}", last.id);
+    println!("{}", serde_json::to_string(&last).expect("Error serializing to JSON"));
 }
