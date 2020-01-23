@@ -30,4 +30,7 @@ fn main() {
     let last = events.order(when.desc()).first::<Event>(&connection).expect("Error loading event");
     println!("{}", last.id);
     println!("{}", serde_json::to_string(&last).expect("Error serializing to JSON"));
+
+    let history = events.order(when).load::<Event>(&connection).expect("Error loading history");
+    println!("{}", serde_json::to_string(&history).expect("Error serializing history to JSON"));
 }
