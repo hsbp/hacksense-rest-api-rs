@@ -1,0 +1,5 @@
+<?xml version="1.0"?><history>
+	{%- for event in history -%}
+	<state_change id="{{ event.id }}" when="{{ event.when }}" what="{% if event.what %}1{% else %}0{% endif %}"/>
+	{%- endfor -%}
+</history>
