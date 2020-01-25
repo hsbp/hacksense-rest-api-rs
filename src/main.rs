@@ -21,7 +21,7 @@ use models::*;
 
 #[derive(Template)]
 #[template(path = "history.xml")]
-pub struct History {
+pub struct HistoryXML {
     history: Vec<Event>,
 }
 
@@ -67,7 +67,7 @@ async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<Http
     use schema::events::dsl::*;
     let connection = establish_connection();
     let history = events.order(when).load::<Event>(&connection).expect("Error loading history");
-    let tpl = History { history };
+    let tpl = HistoryXML { history };
     Ok(HttpResponse::Ok().content_type("text/xml").body(tpl.render().unwrap()))
 }
 
