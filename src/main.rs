@@ -4,12 +4,15 @@ extern crate dotenv;
 extern crate serde;
 extern crate serde_json;
 extern crate askama;
+extern crate actix_web;
 
+use actix_web::{web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use std::env;
+use std::collections::HashMap;
 
 pub mod schema;
 pub mod models;
@@ -22,6 +25,10 @@ pub struct History {
     history: Vec<Event>,
 }
 
+#[derive(Template)]
+#[template(path = "home.html")]
+pub struct Home;
+
 pub fn establish_connection() -> SqliteConnection {
     dotenv().ok();
 
@@ -31,19 +38,51 @@ pub fn establish_connection() -> SqliteConnection {
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-fn main() {
+async fn home(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    Ok(HttpResponse::Ok().content_type("text/html").body(Home.render().unwrap()))
+}
+
+async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     use schema::events::dsl::*;
-
     let connection = establish_connection();
-    let last = events.order(when.desc()).first::<Event>(&connection).expect("Error loading event");
-    println!("{}", last.id);
-    println!("{}", serde_json::to_string(&last).expect("Error serializing to JSON"));
+    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
+    Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&last)?))
+}
 
-    println!("{}", last.render().expect("Error rendering to XML"));
+async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
+    Ok(HttpResponse::Ok().content_type("text/xml").body(last.render().unwrap()))
+}
 
+async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
     let history = events.order(when).load::<Event>(&connection).expect("Error loading history");
-    println!("{}", serde_json::to_string(&history).expect("Error serializing history to JSON"));
+    Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&history)?))
+}
 
+async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    let history = events.order(when).load::<Event>(&connection).expect("Error loading history");
     let tpl = History { history };
-    println!("{}", tpl.render().expect("Error rendering history to XML"));
+    Ok(HttpResponse::Ok().content_type("text/xml").body(tpl.render().unwrap()))
+}
+
+#[actix_rt::main]
+async fn main() -> std::io::Result<()> {
+    // start http server
+    HttpServer::new(move || {
+        App::new()
+			.service(web::resource("/").route(web::get().to(home)))
+			.service(web::resource("/status.json").route(web::get().to(status_json)))
+			.service(web::resource("/status.xml").route(web::get().to(status_xml)))
+			.service(web::resource("/history.json").route(web::get().to(history_json)))
+			.service(web::resource("/history.xml").route(web::get().to(history_xml)))
+    })
+    .bind("127.0.0.1:8080")?
+    .run()
+    .await
 }
