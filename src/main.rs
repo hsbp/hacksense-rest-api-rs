@@ -69,6 +69,14 @@ async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpR
     Ok(HttpResponse::Ok().content_type("text/xml").body(last.render().unwrap()))
 }
 
+async fn status_txt(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
+	let tpl = Status { open_closed: if last.what { "open" } else { "closed" }, when: last.when };
+    Ok(HttpResponse::Ok().content_type("text/plain").body(format!("H.A.C.K. is currently {} since {}", tpl.open_closed, tpl.when)))
+}
+
 async fn status_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     use schema::events::dsl::*;
     let connection = establish_connection();
@@ -107,6 +115,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/status.json").route(web::get().to(status_json)))
+			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
 			.service(web::resource("/status.xml").route(web::get().to(status_xml)))
 			.service(web::resource("/status").route(web::get().to(status_html)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
