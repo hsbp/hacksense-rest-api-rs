@@ -59,14 +59,14 @@ async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpR
 async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     use schema::events::dsl::*;
     let connection = establish_connection();
-    let history = events.order(when).load::<Event>(&connection).expect("Error loading history");
+    let history = events.order(when).load::<Event>(&connection).unwrap();
     Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&history)?))
 }
 
 async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     use schema::events::dsl::*;
     let connection = establish_connection();
-    let history = events.order(when).load::<Event>(&connection).expect("Error loading history");
+    let history = events.order(when).load::<Event>(&connection).unwrap();
     let tpl = HistoryXML { history };
     Ok(HttpResponse::Ok().content_type("text/xml").body(tpl.render().unwrap()))
 }
