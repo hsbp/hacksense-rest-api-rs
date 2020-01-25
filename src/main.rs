@@ -26,6 +26,19 @@ pub struct HistoryXML {
 }
 
 #[derive(Template)]
+#[template(path = "history.html")]
+pub struct HistoryHTML {
+    history: Vec<Event>,
+}
+
+#[derive(Template)]
+#[template(path = "status.html")]
+pub struct Status<'a> {
+	open_closed: &'a str,
+	when: String,
+}
+
+#[derive(Template)]
 #[template(path = "home.html")]
 pub struct Home;
 
@@ -56,6 +69,14 @@ async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpR
     Ok(HttpResponse::Ok().content_type("text/xml").body(last.render().unwrap()))
 }
 
+async fn status_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
+	let tpl = Status { open_closed: if last.what { "open" } else { "closed" }, when: last.when };
+    Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
+}
+
 async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     use schema::events::dsl::*;
     let connection = establish_connection();
@@ -71,6 +92,14 @@ async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<Http
     Ok(HttpResponse::Ok().content_type("text/xml").body(tpl.render().unwrap()))
 }
 
+async fn history_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    let history = events.order(when).load::<Event>(&connection).unwrap();
+    let tpl = HistoryHTML { history };
+    Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
+}
+
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     // start http server
@@ -79,8 +108,10 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/status.json").route(web::get().to(status_json)))
 			.service(web::resource("/status.xml").route(web::get().to(status_xml)))
+			.service(web::resource("/status").route(web::get().to(status_html)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
 			.service(web::resource("/history.xml").route(web::get().to(history_xml)))
+			.service(web::resource("/history").route(web::get().to(history_html)))
     })
     .bind("127.0.0.1:8080")?
     .run()

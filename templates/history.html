@@ -1,0 +1,17 @@
+{% extends "hacksense_layout.html" %}
+{% block content %}
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Timestamp</th>
+        <th>Status</th>
+    </tr>
+    {% for event in history %}
+    <tr>
+        <td class="uuid">{{ event.id }}</td>
+        <td>{{ event.when }}</td>
+        <td class="{% if event.what %}open{% else %}closed{% endif %}">{% if event.what %}Open{% else %}Closed{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
