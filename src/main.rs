@@ -90,8 +90,7 @@ async fn home(_query: web::Query<HashMap<String, String>>) -> Result<HttpRespons
 }
 
 async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let last = get_last_event();
-    Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&last)?))
+    Ok(HttpResponse::Ok().json(get_last_event()))
 }
 
 async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
@@ -116,8 +115,7 @@ async fn status_html(_query: web::Query<HashMap<String, String>>) -> Result<Http
 }
 
 async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let history = get_history();
-    Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&history)?))
+    Ok(HttpResponse::Ok().json(get_history()))
 }
 
 async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
@@ -215,7 +213,7 @@ async fn status_spaceapi() -> HttpResponse {
         },
         "url": "https://hsbp.org"
     });
-    HttpResponse::Ok().content_type("application/json").body(status.to_string())
+    HttpResponse::Ok().json(status)
 }
 
 #[actix_rt::main]
