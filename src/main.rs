@@ -51,60 +51,59 @@ pub fn establish_connection() -> SqliteConnection {
         .expect(&format!("Error connecting to {}", database_url))
 }
 
+pub fn get_last_event() -> Event {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    events.order(when.desc()).first::<Event>(&connection).unwrap()
+}
+
+pub fn get_status() -> Status<'static> {
+    let last = get_last_event();
+	Status { open_closed: if last.what { "open" } else { "closed" }, when: last.when }
+}
+
+pub fn get_history() -> Vec<Event> {
+    use schema::events::dsl::*;
+    let connection = establish_connection();
+    events.order(when).load::<Event>(&connection).unwrap()
+}
+
 async fn home(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().content_type("text/html").body(Home.render().unwrap()))
 }
 
 async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
+    let last = get_last_event();
     Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&last)?))
 }
 
 async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
+    let last = get_last_event();
     Ok(HttpResponse::Ok().content_type("text/xml").body(last.render().unwrap()))
 }
 
 async fn status_txt(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
-	let tpl = Status { open_closed: if last.what { "open" } else { "closed" }, when: last.when };
+    let tpl = get_status();
     Ok(HttpResponse::Ok().content_type("text/plain").body(format!("H.A.C.K. is currently {} since {}", tpl.open_closed, tpl.when)))
 }
 
 async fn status_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let last = events.order(when.desc()).first::<Event>(&connection).unwrap();
-	let tpl = Status { open_closed: if last.what { "open" } else { "closed" }, when: last.when };
+    let tpl = get_status();
     Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
 }
 
 async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let history = events.order(when).load::<Event>(&connection).unwrap();
+    let history = get_history();
     Ok(HttpResponse::Ok().content_type("application/json").body(serde_json::to_string(&history)?))
 }
 
 async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let history = events.order(when).load::<Event>(&connection).unwrap();
-    let tpl = HistoryXML { history };
+    let tpl = HistoryXML { history: get_history() };
     Ok(HttpResponse::Ok().content_type("text/xml").body(tpl.render().unwrap()))
 }
 
 async fn history_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    use schema::events::dsl::*;
-    let connection = establish_connection();
-    let history = events.order(when).load::<Event>(&connection).unwrap();
-    let tpl = HistoryHTML { history };
+    let tpl = HistoryHTML { history: get_history() };
     Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
 }
 
