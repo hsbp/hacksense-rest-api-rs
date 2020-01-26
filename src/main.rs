@@ -11,11 +11,12 @@ extern crate chrono;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
-use chrono::Local;
+use chrono::{Local, TimeZone};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use hmac::{Hmac, Mac};
+use serde_json::json;
 use sha2::Sha256;
 use std::env;
 use std::fmt::Write;
@@ -166,6 +167,57 @@ async fn submit(path: web::Path<String>) -> HttpResponse {
     }
 }
 
+async fn status_spaceapi() -> HttpResponse {
+    let last = get_last_event();
+    let unix_ts = Local.datetime_from_str(&last.when, TIMESTAMP_FORMAT).unwrap().timestamp();
+    let status = json!({
+        "api": "0.13",
+        "contact": {
+            "email": "hack@hsbp.org",
+            "facebook": "https://www.facebook.com/hackerspace.budapest",
+            "irc": "irc://irc.atw-inter.net/hspbp",
+            "jabber": "hack@conference.xmpp.hsbp.org",
+            "ml": "hspbp@googlegroups.com",
+            "phone": "+36 1 445 4225",
+            "twitter": "@hackerspacebp"
+        },
+        "ext_ccc": "chaostreff",
+        "feeds": {
+            "blog": {
+                "type": "rss",
+                "url": "https://hsbp.org/tiki-blogs_rss.php?ver=2"
+            },
+            "calendar": {
+                "type": "rss",
+                "url": "https://hsbp.org/tiki-calendars_rss.php?ver=2"
+            },
+            "wiki": {
+                "type": "rss",
+                "url": "https://hsbp.org/tiki-wiki_rss.php?ver=2"
+            }
+        },
+        "issue_report_channels": ["email"],
+        "location": {
+            "address": "Bástya u. 12., 1056 Budapest, Hungary",
+            "lat": 47.489167,
+            "lon": 19.059444
+        },
+        "logo": "https://hsbp.org/img/hack.gif",
+        "projects": [
+            "https://github.com/hsbp",
+            "https://hsbp.org/projects",
+            "https://hsbp.org/hwprojektek"
+        ],
+        "space": "H.A.C.K.",
+        "state": {
+            "lastchange": unix_ts,
+            "open": last.what
+        },
+        "url": "https://hsbp.org"
+    });
+    HttpResponse::Ok().content_type("application/json").body(status.to_string())
+}
+
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     // start http server
@@ -173,6 +225,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/submit/{data}").route(web::get().to(submit)))
+			.service(web::resource("/spaceapi_status.json").route(web::get().to(status_spaceapi)))
 			.service(web::resource("/status.json").route(web::get().to(status_json)))
 			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
 			.service(web::resource("/status.csv").route(web::get().to(status_csv)))
