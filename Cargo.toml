@@ -14,3 +14,7 @@ serde = { version = "1.0", features = ["derive"] }
 askama = "0.8"
 actix-web = "2"
 actix-rt = "1"
+hmac = "0.7.1"
+sha2 = "0.8.1"
+hex = "0.4"
+chrono = "0.4"

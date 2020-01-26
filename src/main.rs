@@ -5,20 +5,29 @@ extern crate serde;
 extern crate serde_json;
 extern crate askama;
 extern crate actix_web;
+extern crate hmac;
+extern crate sha2;
+extern crate chrono;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
+use chrono::Local;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use std::env;
 use std::fmt::Write;
 use std::collections::HashMap;
+
+type HmacSha256 = Hmac<Sha256>;
 
 pub mod schema;
 pub mod models;
 
 const CSV_EVENT_LENGTH: usize = 59;
+static TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 use models::*;
 
@@ -129,12 +138,41 @@ async fn history_html(_query: web::Query<HashMap<String, String>>) -> Result<Htt
     Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
 }
 
+async fn submit(path: web::Path<String>) -> HttpResponse {
+    let parts: Vec<&str> = path.split("!").collect();
+    if parts.len() != 3 {
+        return HttpResponse::Unauthorized().finish();
+    }
+    let (id, status, mac) = (parts[0], parts[1], parts[2]);
+    let event = Submission {
+        id,
+        what: status == "1",
+        when: Local::now().format(TIMESTAMP_FORMAT).to_string(),
+    };
+    let mac_bytes = match hex::decode(mac) {
+        Ok(b) => b,
+        _ => return HttpResponse::Unauthorized().finish(),
+    };
+    let subject = format!("{}!{}", id, status);
+    let mut mac = HmacSha256::new_varkey(include_bytes!("../hacksense.key")).unwrap();
+    mac.input(subject.as_bytes());
+    if mac.verify(&mac_bytes).is_ok() {
+        use schema::events::dsl::*;
+        let connection = establish_connection();
+        diesel::insert_into(events).values(&event).execute(&connection); // ignore PK violation
+        HttpResponse::Ok().content_type("text/plain").body("OK\n")
+    } else {
+        HttpResponse::Unauthorized().finish()
+    }
+}
+
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     // start http server
     HttpServer::new(move || {
         App::new()
 			.service(web::resource("/").route(web::get().to(home)))
+			.service(web::resource("/submit/{data}").route(web::get().to(submit)))
 			.service(web::resource("/status.json").route(web::get().to(status_json)))
 			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
 			.service(web::resource("/status.csv").route(web::get().to(status_csv)))
