@@ -45,6 +45,14 @@ pub struct HistoryHTML {
 }
 
 #[derive(Template)]
+#[template(path = "rss.xml")]
+pub struct RSS<'a> {
+    title: &'a str,
+    id: &'a str,
+    pub_date: &'a str,
+}
+
+#[derive(Template)]
 #[template(path = "status.html")]
 pub struct Status<'a> {
 	open_closed: &'a str,
@@ -96,6 +104,17 @@ async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<Http
 async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     let last = get_last_event();
     Ok(HttpResponse::Ok().content_type("text/xml").body(last.render().unwrap()))
+}
+
+async fn status_rss(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    let last = get_last_event();
+    let rfc2822 = Local.datetime_from_str(&last.when, TIMESTAMP_FORMAT).unwrap().to_rfc2822();
+    let rss = RSS {
+        title: &format!("H.A.C.K. has {}", if last.what { "opened" } else { "closed" }),
+        id: &last.id,
+        pub_date: &rfc2822,
+    };
+    Ok(HttpResponse::Ok().content_type("application/rss+xml").body(rss.render().unwrap()))
 }
 
 async fn status_csv(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
@@ -227,6 +246,7 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/status.json").route(web::get().to(status_json)))
 			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
 			.service(web::resource("/status.csv").route(web::get().to(status_csv)))
+			.service(web::resource("/status.rss").route(web::get().to(status_rss)))
 			.service(web::resource("/status.xml").route(web::get().to(status_xml)))
 			.service(web::resource("/status").route(web::get().to(status_html)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
