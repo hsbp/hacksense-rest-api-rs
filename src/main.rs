@@ -10,6 +10,7 @@ extern crate sha2;
 extern crate chrono;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Result};
+use actix_web::http::header;
 use askama::Template;
 use chrono::{Local, TimeZone};
 use diesel::prelude::*;
@@ -103,7 +104,8 @@ async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<Http
 
 async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     let last = get_last_event();
-    Ok(HttpResponse::Ok().content_type("text/xml").body(last.render().unwrap()))
+    let xml = &last.render().unwrap();
+    Ok(HttpResponse::Ok().set(header::ETag(header::EntityTag::strong(last.id))).content_type("text/xml").body(xml))
 }
 
 async fn status_rss(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
