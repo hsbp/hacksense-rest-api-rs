@@ -91,9 +91,21 @@ fn status_json(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.json(last)
 }
 
+async fn format_status_git(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse) -> Result<HttpResponse> {
+    format_status_etag(req, formatter, Some(&include_str!("../.git/refs/heads/master")[..8]))
+}
+
 async fn format_status(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse) -> Result<HttpResponse> {
+    format_status_etag(req, formatter, None)
+}
+
+fn format_status_etag(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse, prefix: Option<&str>) -> Result<HttpResponse> {
     let last = get_last_event();
-    let etag = header::EntityTag::strong(last.id.clone());
+    let etag_payload = match prefix {
+        Some(p) => format!("{}-{}", p, &last.id),
+        None => last.id.clone(),
+    };
+    let etag = header::EntityTag::strong(etag_payload);
 
     let send_reply = match req.get_header::<header::IfNoneMatch>() {
         Some(header::IfNoneMatch::Any) => false,
@@ -191,8 +203,7 @@ async fn submit(path: web::Path<String>) -> HttpResponse {
     }
 }
 
-async fn status_spaceapi() -> HttpResponse {
-    let last = get_last_event();
+fn status_spaceapi(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     let unix_ts = Local.datetime_from_str(&last.when, TIMESTAMP_FORMAT).unwrap().timestamp();
     let status = json!({
         "api": "0.13",
@@ -239,7 +250,7 @@ async fn status_spaceapi() -> HttpResponse {
         },
         "url": "https://hsbp.org"
     });
-    HttpResponse::Ok().json(status)
+    hrb.json(status)
 }
 
 #[actix_rt::main]
@@ -249,7 +260,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/submit/{data}").route(web::get().to(submit)))
-			.service(web::resource("/spaceapi_status.json").route(web::get().to(status_spaceapi)))
+			.service(web::resource("/spaceapi_status.json").route(web::get().to(|req: HttpRequest| format_status_git(req, status_spaceapi))))
 			.service(web::resource("/status.json").route(web::get().to(|req: HttpRequest| format_status(req, status_json))))
 			.service(web::resource("/status.txt").route(web::get().to(|req: HttpRequest| format_status(req, status_txt))))
 			.service(web::resource("/status.csv").route(web::get().to(|req: HttpRequest| format_status(req, status_csv))))
