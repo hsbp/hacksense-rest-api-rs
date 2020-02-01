@@ -21,3 +21,16 @@ pub struct Submission<'a> {
     pub what: bool,
     pub when: String,
 }
+
+#[derive(Template)]
+#[template(path = "status.html")]
+pub struct Status<'a> {
+	pub open_closed: &'a str,
+	pub when: &'a str,
+}
+
+impl Event {
+    pub fn get_status(&self) -> Status {
+        Status { open_closed: if self.what { "open" } else { "closed" }, when: &self.when }
+    }
+}

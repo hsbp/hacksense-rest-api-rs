@@ -55,13 +55,6 @@ pub struct RSS<'a> {
 }
 
 #[derive(Template)]
-#[template(path = "status.html")]
-pub struct Status<'a> {
-	open_closed: &'a str,
-	when: String,
-}
-
-#[derive(Template)]
 #[template(path = "home.html")]
 pub struct Home;
 
@@ -80,11 +73,6 @@ pub fn get_last_event() -> Event {
     events.order(when.desc()).first::<Event>(&connection).unwrap()
 }
 
-pub fn get_status() -> Status<'static> {
-    let last = get_last_event();
-	Status { open_closed: if last.what { "open" } else { "closed" }, when: last.when }
-}
-
 pub fn get_history() -> Vec<Event> {
     use schema::events::dsl::*;
     let connection = establish_connection();
@@ -99,8 +87,8 @@ async fn home(_query: web::Query<HashMap<String, String>>) -> Result<HttpRespons
     Ok(HttpResponse::Ok().content_type("text/html").body(Home.render().unwrap()))
 }
 
-async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    Ok(HttpResponse::Ok().json(get_last_event()))
+fn status_json(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
+    hrb.json(last)
 }
 
 async fn format_status(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse) -> Result<HttpResponse> {
@@ -142,14 +130,14 @@ fn status_csv(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.content_type("text/csv").body(csv)
 }
 
-async fn status_txt(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let tpl = get_status();
-    Ok(HttpResponse::Ok().content_type("text/plain").body(format!("H.A.C.K. is currently {} since {}", tpl.open_closed, tpl.when)))
+fn status_txt(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
+    let tpl = last.get_status();
+    hrb.content_type("text/plain").body(format!("H.A.C.K. is currently {} since {}", tpl.open_closed, tpl.when))
 }
 
-async fn status_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let tpl = get_status();
-    Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
+fn status_html(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
+    let tpl = last.get_status();
+    hrb.content_type("text/html").body(tpl.render().unwrap())
 }
 
 async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
@@ -262,12 +250,12 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/submit/{data}").route(web::get().to(submit)))
 			.service(web::resource("/spaceapi_status.json").route(web::get().to(status_spaceapi)))
-			.service(web::resource("/status.json").route(web::get().to(status_json)))
-			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
+			.service(web::resource("/status.json").route(web::get().to(|req: HttpRequest| format_status(req, status_json))))
+			.service(web::resource("/status.txt").route(web::get().to(|req: HttpRequest| format_status(req, status_txt))))
 			.service(web::resource("/status.csv").route(web::get().to(|req: HttpRequest| format_status(req, status_csv))))
 			.service(web::resource("/status.rss").route(web::get().to(|req: HttpRequest| format_status(req, status_rss))))
 			.service(web::resource("/status.xml").route(web::get().to(|req: HttpRequest| format_status(req, status_xml))))
-			.service(web::resource("/status").route(web::get().to(status_html)))
+			.service(web::resource("/status").route(web::get().to(|req: HttpRequest| format_status(req, status_html))))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
 			.service(web::resource("/history.csv").route(web::get().to(history_csv)))
 			.service(web::resource("/history.xml").route(web::get().to(history_xml)))
