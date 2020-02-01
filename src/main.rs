@@ -10,6 +10,7 @@ extern crate sha2;
 extern crate chrono;
 
 use actix_web::{web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::dev::HttpResponseBuilder;
 use actix_web::http::header;
 use askama::Template;
 use chrono::{Local, TimeZone};
@@ -102,7 +103,7 @@ async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<Http
     Ok(HttpResponse::Ok().json(get_last_event()))
 }
 
-async fn status_xml(req: HttpRequest) -> Result<HttpResponse> {
+async fn format_status(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse) -> Result<HttpResponse> {
     let last = get_last_event();
     let etag = header::EntityTag::strong(last.id.clone());
 
@@ -113,11 +114,16 @@ async fn status_xml(req: HttpRequest) -> Result<HttpResponse> {
     };
 
     if send_reply {
-        let xml = &last.render().unwrap();
-        Ok(HttpResponse::Ok().set(header::ETag(etag)).content_type("text/xml").body(xml))
+        let mut hrb = HttpResponse::Ok();
+        hrb.set(header::ETag(etag));
+        Ok(formatter(last, &mut hrb))
     } else {
         Ok(HttpResponse::NotModified().finish())
     }
+}
+
+fn status_xml(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
+    hrb.content_type("text/xml").body(last.render().unwrap())
 }
 
 async fn status_rss(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
@@ -261,7 +267,7 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
 			.service(web::resource("/status.csv").route(web::get().to(status_csv)))
 			.service(web::resource("/status.rss").route(web::get().to(status_rss)))
-			.service(web::resource("/status.xml").route(web::get().to(status_xml)))
+			.service(web::resource("/status.xml").route(web::get().to(|req: HttpRequest| format_status(req, status_xml))))
 			.service(web::resource("/status").route(web::get().to(status_html)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
 			.service(web::resource("/history.csv").route(web::get().to(history_csv)))
