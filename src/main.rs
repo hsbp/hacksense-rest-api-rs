@@ -8,6 +8,7 @@ extern crate actix_web;
 extern crate hmac;
 extern crate sha2;
 extern crate chrono;
+extern crate mime;
 
 use actix_web::{web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer, Result};
 use actix_web::dev::HttpResponseBuilder;
@@ -91,6 +92,27 @@ async fn home(_query: web::Query<HashMap<String, String>>) -> Result<HttpRespons
 
 fn status_json(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.json(last)
+}
+
+async fn status_auto(req: HttpRequest) -> Result<HttpResponse> {
+    if let Some(a) = req.get_header::<header::Accept>().as_deref() {
+        for qi in a {
+            let i = &qi.item;
+            match (i.type_(), i.subtype()) {
+                (mime::TEXT, mime::PLAIN) => return format_status_etag(req, status_txt, None),
+                (mime::TEXT, mime::CSV) => return format_status_etag(req, status_csv, None),
+                (mime::TEXT, mime::XML) => return format_status_etag(req, status_xml, None),
+                (mime::TEXT, mime::HTML) => return format_status_etag(req, status_html, None),
+                (mime::APPLICATION, mime::JSON) => return format_status_etag(req, status_json, None),
+                (mime::APPLICATION, st) => if st == "rss" { return format_status_etag(req, status_rss, None) },
+                _ => (),
+            }
+            /*if i.type_() == mime::APPLICATION && i.subtype() == "rss" {
+                return format_status_etag(req, status_rss, None);
+            }*/
+        }
+    }
+    return format_status_etag(req, status_html, None)
 }
 
 async fn format_status_git(req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
@@ -269,7 +291,7 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/status.csv").route(web::get().to(|req: HttpRequest| format_status(req, status_csv))))
 			.service(web::resource("/status.rss").route(web::get().to(|req: HttpRequest| format_status(req, status_rss))))
 			.service(web::resource("/status.xml").route(web::get().to(|req: HttpRequest| format_status(req, status_xml))))
-			.service(web::resource("/status").route(web::get().to(|req: HttpRequest| format_status(req, status_html))))
+			.service(web::resource("/status").route(web::get().to(status_auto)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
 			.service(web::resource("/history.csv").route(web::get().to(history_csv)))
 			.service(web::resource("/history.xml").route(web::get().to(history_xml)))
