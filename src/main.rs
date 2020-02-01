@@ -31,6 +31,7 @@ pub mod models;
 
 const CSV_EVENT_LENGTH: usize = 59;
 static TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+static CSV_HEAD: &str = "ID;Timestamp;Status\n";
 
 use models::*;
 
@@ -163,7 +164,8 @@ async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<Http
 
 async fn history_csv(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
     let history = get_history();
-    let mut csv = String::with_capacity(history.len() * CSV_EVENT_LENGTH);
+    let mut csv = String::with_capacity(history.len() * CSV_EVENT_LENGTH + CSV_HEAD.len());
+    write!(&mut csv, "{}", CSV_HEAD);
     for event in history {
         event_to_csv(&mut csv, &event);
     }
