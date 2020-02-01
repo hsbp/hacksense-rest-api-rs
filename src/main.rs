@@ -25,6 +25,7 @@ use std::fmt::Write;
 use std::collections::HashMap;
 
 type HmacSha256 = Hmac<Sha256>;
+type EventFormatter = fn(Event, &mut HttpResponseBuilder) -> HttpResponse;
 
 pub mod schema;
 pub mod models;
@@ -92,15 +93,15 @@ fn status_json(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.json(last)
 }
 
-async fn format_status_git(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse) -> Result<HttpResponse> {
+async fn format_status_git(req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
     format_status_etag(req, formatter, Some(&include_str!("../.git/refs/heads/master")[..8]))
 }
 
-async fn format_status(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse) -> Result<HttpResponse> {
+async fn format_status(req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
     format_status_etag(req, formatter, None)
 }
 
-fn format_status_etag(req: HttpRequest, formatter: fn(Event, &mut HttpResponseBuilder) -> HttpResponse, prefix: Option<&str>) -> Result<HttpResponse> {
+fn format_status_etag(req: HttpRequest, formatter: EventFormatter, prefix: Option<&str>) -> Result<HttpResponse> {
     let last = get_last_event();
     let etag_payload = match prefix {
         Some(p) => format!("{}-{}", p, &last.id),
