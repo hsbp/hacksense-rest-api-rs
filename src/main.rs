@@ -126,21 +126,20 @@ fn status_xml(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.content_type("text/xml").body(last.render().unwrap())
 }
 
-async fn status_rss(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let last = get_last_event();
+fn status_rss(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     let rfc2822 = Local.datetime_from_str(&last.when, TIMESTAMP_FORMAT).unwrap().to_rfc2822();
     let rss = RSS {
         title: &format!("H.A.C.K. has {}", if last.what { "opened" } else { "closed" }),
         id: &last.id,
         pub_date: &rfc2822,
     };
-    Ok(HttpResponse::Ok().content_type("application/rss+xml").body(rss.render().unwrap()))
+    hrb.content_type("application/rss+xml").body(rss.render().unwrap())
 }
 
-async fn status_csv(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+fn status_csv(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     let mut csv = String::with_capacity(CSV_EVENT_LENGTH);
-    event_to_csv(&mut csv, &get_last_event());
-    Ok(HttpResponse::Ok().content_type("text/csv").body(csv))
+    event_to_csv(&mut csv, &last);
+    hrb.content_type("text/csv").body(csv)
 }
 
 async fn status_txt(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
@@ -265,8 +264,8 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/spaceapi_status.json").route(web::get().to(status_spaceapi)))
 			.service(web::resource("/status.json").route(web::get().to(status_json)))
 			.service(web::resource("/status.txt").route(web::get().to(status_txt)))
-			.service(web::resource("/status.csv").route(web::get().to(status_csv)))
-			.service(web::resource("/status.rss").route(web::get().to(status_rss)))
+			.service(web::resource("/status.csv").route(web::get().to(|req: HttpRequest| format_status(req, status_csv))))
+			.service(web::resource("/status.rss").route(web::get().to(|req: HttpRequest| format_status(req, status_rss))))
 			.service(web::resource("/status.xml").route(web::get().to(|req: HttpRequest| format_status(req, status_xml))))
 			.service(web::resource("/status").route(web::get().to(status_html)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
