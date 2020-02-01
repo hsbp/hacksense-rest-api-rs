@@ -9,7 +9,7 @@ extern crate hmac;
 extern crate sha2;
 extern crate chrono;
 
-use actix_web::{web, App, HttpResponse, HttpServer, Result};
+use actix_web::{web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer, Result};
 use actix_web::http::header;
 use askama::Template;
 use chrono::{Local, TimeZone};
@@ -102,10 +102,22 @@ async fn status_json(_query: web::Query<HashMap<String, String>>) -> Result<Http
     Ok(HttpResponse::Ok().json(get_last_event()))
 }
 
-async fn status_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+async fn status_xml(req: HttpRequest) -> Result<HttpResponse> {
     let last = get_last_event();
-    let xml = &last.render().unwrap();
-    Ok(HttpResponse::Ok().set(header::ETag(header::EntityTag::strong(last.id))).content_type("text/xml").body(xml))
+    let etag = header::EntityTag::strong(last.id.clone());
+
+    let send_reply = match req.get_header::<header::IfNoneMatch>() {
+        Some(header::IfNoneMatch::Any) => false,
+        Some(header::IfNoneMatch::Items(ref items)) => !items.into_iter().any(|item| item.strong_eq(&etag)),
+        None => true,
+    };
+
+    if send_reply {
+        let xml = &last.render().unwrap();
+        Ok(HttpResponse::Ok().set(header::ETag(etag)).content_type("text/xml").body(xml))
+    } else {
+        Ok(HttpResponse::NotModified().finish())
+    }
 }
 
 async fn status_rss(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
