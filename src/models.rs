@@ -10,16 +10,16 @@ use crate::schema::events;
 #[template(path = "status.xml")]
 pub struct Event {
     pub id: String,
-    pub what: bool,
     pub when: String,
+    pub what: bool,
 }
 
 #[derive(Insertable)]
 #[table_name="events"]
 pub struct Submission<'a> {
     pub id: &'a str,
-    pub what: bool,
     pub when: String,
+    pub what: bool,
 }
 
 #[derive(Template)]
