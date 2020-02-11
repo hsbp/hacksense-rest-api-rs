@@ -17,6 +17,7 @@ use askama::Template;
 use chrono::{Local, TimeZone};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
+use diesel::r2d2::{self, ConnectionManager};
 use dotenv::dotenv;
 use hmac::{Hmac, Mac};
 use serde_json::json;
@@ -27,6 +28,7 @@ use std::collections::HashMap;
 
 type HmacSha256 = Hmac<Sha256>;
 type EventFormatter = fn(Event, &mut HttpResponseBuilder) -> HttpResponse;
+type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 pub mod schema;
 pub mod models;
@@ -61,24 +63,15 @@ pub struct RSS<'a> {
 #[template(path = "home.html")]
 pub struct Home;
 
-pub fn establish_connection() -> SqliteConnection {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
-}
-
-pub fn get_last_event() -> Event {
+pub fn get_last_event(pool: web::Data<DbPool>) -> Event {
     use schema::events::dsl::*;
-    let connection = establish_connection();
+    let connection = pool.get().expect("couldn't get db connection from pool");
     events.order(when.desc()).first::<Event>(&connection).unwrap()
 }
 
-pub fn get_history() -> Vec<Event> {
+pub fn get_history(pool: web::Data<DbPool>) -> Vec<Event> {
     use schema::events::dsl::*;
-    let connection = establish_connection();
+    let connection = pool.get().expect("couldn't get db connection from pool");
     events.order(when).load::<Event>(&connection).unwrap()
 }
 
@@ -94,37 +87,34 @@ fn status_json(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.json(last)
 }
 
-async fn status_auto(req: HttpRequest) -> Result<HttpResponse> {
+async fn status_auto(pool: web::Data<DbPool>, req: HttpRequest) -> Result<HttpResponse> {
     if let Some(a) = req.get_header::<header::Accept>().as_deref() {
         for qi in a {
             let i = &qi.item;
             match (i.type_(), i.subtype()) {
-                (mime::TEXT, mime::PLAIN) => return format_status_etag(req, status_txt, None),
-                (mime::TEXT, mime::CSV) => return format_status_etag(req, status_csv, None),
-                (mime::TEXT, mime::XML) => return format_status_etag(req, status_xml, None),
-                (mime::TEXT, mime::HTML) => return format_status_etag(req, status_html, None),
-                (mime::APPLICATION, mime::JSON) => return format_status_etag(req, status_json, None),
-                (mime::APPLICATION, st) => if st == "rss" { return format_status_etag(req, status_rss, None) },
+                (mime::TEXT, mime::PLAIN) => return format_status_etag(pool, req, status_txt, None),
+                (mime::TEXT, mime::CSV) => return format_status_etag(pool, req, status_csv, None),
+                (mime::TEXT, mime::XML) => return format_status_etag(pool, req, status_xml, None),
+                (mime::TEXT, mime::HTML) => return format_status_etag(pool, req, status_html, None),
+                (mime::APPLICATION, mime::JSON) => return format_status_etag(pool, req, status_json, None),
+                (mime::APPLICATION, st) => if st == "rss" { return format_status_etag(pool, req, status_rss, None) },
                 _ => (),
             }
-            /*if i.type_() == mime::APPLICATION && i.subtype() == "rss" {
-                return format_status_etag(req, status_rss, None);
-            }*/
         }
     }
-    return format_status_etag(req, status_html, None)
+    return format_status_etag(pool, req, status_html, None)
 }
 
-async fn format_status_git(req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
-    format_status_etag(req, formatter, Some(&include_str!("../.git/refs/heads/master")[..8]))
+async fn format_status_git(pool: web::Data<DbPool>, req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
+    format_status_etag(pool, req, formatter, Some(&include_str!("../.git/refs/heads/master")[..8]))
 }
 
-async fn format_status(req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
-    format_status_etag(req, formatter, None)
+async fn format_status(pool: web::Data<DbPool>, req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
+    format_status_etag(pool, req, formatter, None)
 }
 
-fn format_status_etag(req: HttpRequest, formatter: EventFormatter, prefix: Option<&str>) -> Result<HttpResponse> {
-    let last = get_last_event();
+fn format_status_etag(pool: web::Data<DbPool>, req: HttpRequest, formatter: EventFormatter, prefix: Option<&str>) -> Result<HttpResponse> {
+    let last = get_last_event(pool);
     let etag_payload = match prefix {
         Some(p) => format!("{}-{}", p, &last.id),
         None => last.id.clone(),
@@ -176,17 +166,17 @@ fn status_html(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     hrb.content_type("text/html").body(tpl.render().unwrap())
 }
 
-async fn history_json(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    Ok(HttpResponse::Ok().json(get_history()))
+async fn history_json(pool: web::Data<DbPool>, _query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    Ok(HttpResponse::Ok().json(get_history(pool)))
 }
 
-async fn history_xml(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let tpl = HistoryXML { history: get_history() };
+async fn history_xml(pool: web::Data<DbPool>, _query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    let tpl = HistoryXML { history: get_history(pool) };
     Ok(HttpResponse::Ok().content_type("text/xml").body(tpl.render().unwrap()))
 }
 
-async fn history_csv(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let history = get_history();
+async fn history_csv(pool: web::Data<DbPool>, _query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    let history = get_history(pool);
     let mut csv = String::with_capacity(history.len() * CSV_EVENT_LENGTH + CSV_HEAD.len());
     write!(&mut csv, "{}", CSV_HEAD);
     for event in history {
@@ -195,12 +185,12 @@ async fn history_csv(_query: web::Query<HashMap<String, String>>) -> Result<Http
     Ok(HttpResponse::Ok().content_type("text/csv").body(csv))
 }
 
-async fn history_html(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
-    let tpl = HistoryHTML { history: get_history() };
+async fn history_html(pool: web::Data<DbPool>, _query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
+    let tpl = HistoryHTML { history: get_history(pool) };
     Ok(HttpResponse::Ok().content_type("text/html").body(tpl.render().unwrap()))
 }
 
-async fn submit(path: web::Path<String>) -> HttpResponse {
+async fn submit(pool: web::Data<DbPool>, path: web::Path<String>) -> HttpResponse {
     let parts: Vec<&str> = path.split("!").collect();
     if parts.len() != 3 {
         return HttpResponse::Unauthorized().finish();
@@ -220,7 +210,7 @@ async fn submit(path: web::Path<String>) -> HttpResponse {
     mac.input(subject.as_bytes());
     if mac.verify(&mac_bytes).is_ok() {
         use schema::events::dsl::*;
-        let connection = establish_connection();
+        let connection = pool.get().expect("couldn't get db connection from pool");
         diesel::insert_into(events).values(&event).execute(&connection); // ignore PK violation
         HttpResponse::Ok().content_type("text/plain").body("OK\n")
     } else {
@@ -280,17 +270,25 @@ fn status_spaceapi(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    let manager = ConnectionManager::<SqliteConnection>::new(database_url);
+    let pool = r2d2::Pool::builder()
+                .build(manager).expect("Failed to create pool.");
     // start http server
     HttpServer::new(move || {
         App::new()
+            .data(pool.clone())
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/submit/{data}").route(web::get().to(submit)))
-			.service(web::resource("/spaceapi_status.json").route(web::get().to(|req: HttpRequest| format_status_git(req, status_spaceapi))))
-			.service(web::resource("/status.json").route(web::get().to(|req: HttpRequest| format_status(req, status_json))))
-			.service(web::resource("/status.txt").route(web::get().to(|req: HttpRequest| format_status(req, status_txt))))
-			.service(web::resource("/status.csv").route(web::get().to(|req: HttpRequest| format_status(req, status_csv))))
-			.service(web::resource("/status.rss").route(web::get().to(|req: HttpRequest| format_status(req, status_rss))))
-			.service(web::resource("/status.xml").route(web::get().to(|req: HttpRequest| format_status(req, status_xml))))
+			.service(web::resource("/spaceapi_status.json").route(web::get().to(|pool: web::Data<DbPool>, req: HttpRequest| format_status_git(pool, req, status_spaceapi))))
+			.service(web::resource("/status.json").route(web::get().to(|pool: web::Data<DbPool>, req: HttpRequest| format_status(pool, req, status_json))))
+			.service(web::resource("/status.txt").route(web::get().to(|pool: web::Data<DbPool>, req: HttpRequest| format_status(pool, req, status_txt))))
+			.service(web::resource("/status.csv").route(web::get().to(|pool: web::Data<DbPool>, req: HttpRequest| format_status(pool, req, status_csv))))
+			.service(web::resource("/status.rss").route(web::get().to(|pool: web::Data<DbPool>, req: HttpRequest| format_status(pool, req, status_rss))))
+			.service(web::resource("/status.xml").route(web::get().to(|pool: web::Data<DbPool>, req: HttpRequest| format_status(pool, req, status_xml))))
 			.service(web::resource("/status").route(web::get().to(status_auto)))
 			.service(web::resource("/history.json").route(web::get().to(history_json)))
 			.service(web::resource("/history.csv").route(web::get().to(history_csv)))
