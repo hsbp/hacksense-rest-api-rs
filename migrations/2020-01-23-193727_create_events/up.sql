@@ -3,3 +3,4 @@ CREATE TABLE events (
 	"when" VARCHAR NOT NULL,
 	what BOOLEAN NOT NULL
 );
+CREATE INDEX event_timestamp ON events ("when");
