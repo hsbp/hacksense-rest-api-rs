@@ -191,7 +191,7 @@ async fn history_html(pool: web::Data<DbPool>, _query: web::Query<HashMap<String
 }
 
 async fn submit(pool: web::Data<DbPool>, path: web::Path<String>) -> HttpResponse {
-    let parts: Vec<&str> = path.split("!").collect();
+    let parts: Vec<&str> = path.split('!').collect();
     if parts.len() != 3 {
         return HttpResponse::Unauthorized().finish();
     }
