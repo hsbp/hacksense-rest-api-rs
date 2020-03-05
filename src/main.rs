@@ -123,7 +123,7 @@ fn format_status_etag(pool: web::Data<DbPool>, req: HttpRequest, formatter: Even
 
     let send_reply = match req.get_header::<header::IfNoneMatch>() {
         Some(header::IfNoneMatch::Any) => false,
-        Some(header::IfNoneMatch::Items(ref items)) => !items.into_iter().any(|item| item.strong_eq(&etag)),
+        Some(header::IfNoneMatch::Items(ref items)) => !items.iter().any(|item| item.strong_eq(&etag)),
         None => true,
     };
 
