@@ -76,7 +76,7 @@ pub fn get_history(pool: web::Data<DbPool>) -> Vec<Event> {
 }
 
 pub fn event_to_csv(dst: & mut String, src: &Event) -> Result<(), std::fmt::Error> {
-    write!(dst, "{};{};{}\n", src.id, src.when, if src.what { '1' } else { '0' })
+    writeln!(dst, "{};{};{}", src.id, src.when, if src.what { '1' } else { '0' })
 }
 
 async fn home(_query: web::Query<HashMap<String, String>>) -> Result<HttpResponse> {
