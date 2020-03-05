@@ -102,7 +102,7 @@ async fn status_auto(pool: web::Data<DbPool>, req: HttpRequest) -> Result<HttpRe
             }
         }
     }
-    return format_status_etag(pool, req, status_html, None)
+    format_status_etag(pool, req, status_html, None)
 }
 
 async fn format_status_git(pool: web::Data<DbPool>, req: HttpRequest, formatter: EventFormatter) -> Result<HttpResponse> {
