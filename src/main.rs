@@ -192,13 +192,13 @@ async fn history_html(pool: web::Data<DbPool>, _query: web::Query<HashMap<String
 
 async fn submit(pool: web::Data<DbPool>, path: web::Path<String>) -> HttpResponse {
     let parts: Vec<&str> = path.split('!').collect();
-    if parts.len() != 3 {
-        return HttpResponse::Unauthorized().finish();
-    }
-    let (id, status, mac) = (parts[0], parts[1], parts[2]);
+    let (id, status, mac) = match &parts[..] {
+        [id, status, mac] => (id, status, mac),
+        _ => return HttpResponse::Unauthorized().finish(),
+    };
     let event = Submission {
         id,
-        what: status == "1",
+        what: status.starts_with('1'),
         when: Local::now().format(TIMESTAMP_FORMAT).to_string(),
     };
     let mac_bytes = match hex::decode(mac) {
