@@ -295,7 +295,7 @@ async fn main() -> std::io::Result<()> {
 			.service(web::resource("/history.xml").route(web::get().to(history_xml)))
 			.service(web::resource("/history").route(web::get().to(history_html)))
     })
-    .bind("127.0.0.1:8080")?
+    .bind("127.0.0.1:8000")?
     .run()
     .await
 }
