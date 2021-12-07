@@ -10,6 +10,7 @@ extern crate sha2;
 extern crate chrono;
 extern crate mime;
 
+use actix_cors::Cors;
 use actix_web::{web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer, Result};
 use actix_web::dev::HttpResponseBuilder;
 use actix_web::http::header;
@@ -279,7 +280,13 @@ async fn main() -> std::io::Result<()> {
                 .build(manager).expect("Failed to create pool.");
     // start http server
     HttpServer::new(move || {
+        let cors = Cors::default()
+            .allow_any_origin()
+            .allowed_methods(vec!["GET", "HEAD", "OPTIONS"])
+            .allowed_headers(vec![header::ACCEPT, header::IF_NONE_MATCH])
+            .max_age(3600);
         App::new()
+            .wrap(cors)
             .data(pool.clone())
 			.service(web::resource("/").route(web::get().to(home)))
 			.service(web::resource("/submit/{data}").route(web::get().to(submit)))
