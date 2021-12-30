@@ -223,13 +223,16 @@ fn status_spaceapi(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
     let unix_ts = Local.datetime_from_str(&last.when, TIMESTAMP_FORMAT).unwrap().timestamp();
     let status = json!({
         "api": "0.13",
+        "api_compatibility": ["14"],
         "contact": {
             "email": "hack@hsbp.org",
             "facebook": "https://www.facebook.com/hackerspace.budapest",
             "irc": "irc://irc.atw-inter.net/hspbp",
             "jabber": "hack@conference.xmpp.hsbp.org",
+            "xmpp": "hack@conference.xmpp.hsbp.org",
             "ml": "hspbp@googlegroups.com",
             "phone": "+36 1 445 4225",
+            "matrix": "#hsbp:matrix.org",
             "twitter": "@hackerspacebp"
         },
         "ext_ccc": "chaostreff",
@@ -249,6 +252,7 @@ fn status_spaceapi(last: Event, hrb: &mut HttpResponseBuilder) -> HttpResponse {
         },
         "issue_report_channels": ["email"],
         "location": {
+            "timezone": "Europe/Budapest",
             "address": "Bástya u. 12., 1056 Budapest, Hungary",
             "lat": 47.489167,
             "lon": 19.059444
